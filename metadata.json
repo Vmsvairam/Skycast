@@ -1,0 +1,5 @@
+{
+  "name": "SkyCast Weather",
+  "description": "A modern, Apple-style weather application with glassmorphism and real-time data.",
+  "requestFramePermissions": ["geolocation"]
+}
