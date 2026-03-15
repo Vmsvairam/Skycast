@@ -28,10 +28,23 @@ import {
   Bell,
   Zap,
   Umbrella,
-  Briefcase
+  Briefcase,
+  ShoppingBag,
+  ShieldCheck,
+  Shirt
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
-import { getWeatherInsights, getTravelPlan, getSmartAlerts, WeatherInsight, TravelPlan } from "./services/geminiService";
+import { MapContainer, TileLayer, Marker, Popup, useMapEvents, useMap } from "react-leaflet";
+import L from "leaflet";
+import { 
+  getWeatherInsights, 
+  getTravelPlan, 
+  getSmartAlerts, 
+  getProductSuggestions,
+  WeatherInsight, 
+  TravelPlan,
+  ProductSuggestion 
+} from "./services/geminiService";
 
 interface WeatherData {
   current: any;
@@ -221,6 +234,23 @@ function getWeatherIcon(condition: string, size = 24, animate = false) {
   }
 }
 
+function MapEvents({ onMapClick }: { onMapClick: (lat: number, lon: number) => void }) {
+  useMapEvents({
+    click(e) {
+      onMapClick(e.latlng.lat, e.latlng.lng);
+    },
+  });
+  return null;
+}
+
+function ChangeView({ center }: { center: [number, number] }) {
+  const map = useMap();
+  useEffect(() => {
+    map.setView(center, map.getZoom());
+  }, [center, map]);
+  return null;
+}
+
 export default function App() {
   const [city, setCity] = useState("");
   const [weather, setWeather] = useState<WeatherData | null>(null);
@@ -236,6 +266,7 @@ export default function App() {
   // AI State
   const [aiInsights, setAiInsights] = useState<WeatherInsight[]>([]);
   const [smartAlerts, setSmartAlerts] = useState<string[]>([]);
+  const [productSuggestions, setProductSuggestions] = useState<ProductSuggestion[]>([]);
   const [travelMode, setTravelMode] = useState(false);
   const [travelPlan, setTravelPlan] = useState<TravelPlan | null>(null);
   const [travelDates, setTravelDates] = useState("");
@@ -245,6 +276,7 @@ export default function App() {
   // Search Suggestions State
   const [suggestions, setSuggestions] = useState<any[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [mapCenter, setMapCenter] = useState<[number, number]>([51.505, -0.09]);
 
   useEffect(() => {
     const saved = localStorage.getItem("pinned_locations");
@@ -344,10 +376,14 @@ export default function App() {
       setWeather(data);
       updateBackground(data.current.weather[0].main, data.current.sys);
       if (data.current.name) setCity(data.current.name);
+      if (data.current.coord) {
+        setMapCenter([data.current.coord.lat, data.current.coord.lon]);
+      }
 
       // Fetch AI Insights
       getWeatherInsights(data).then(setAiInsights);
       getSmartAlerts(data.forecast).then(setSmartAlerts);
+      getProductSuggestions(data).then(setProductSuggestions);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -801,8 +837,51 @@ export default function App() {
                 </div>
               </div>
 
-              {/* AI Insights Card */}
-              <div className="glass p-8 rounded-[3rem] flex flex-col justify-between bg-gradient-to-br from-indigo-500/10 to-transparent border-indigo-500/20">
+              {/* Interactive Map */}
+              <div className="glass rounded-[3rem] overflow-hidden relative min-h-[400px]">
+                <div className="absolute top-6 left-6 z-[1000] glass px-4 py-2 rounded-xl flex items-center gap-2">
+                  <Info size={14} className="text-white/40" />
+                  <span className="text-[10px] font-bold uppercase tracking-widest">Click map to explore</span>
+                </div>
+                <MapContainer 
+                  center={mapCenter} 
+                  zoom={10} 
+                  className="h-full w-full"
+                  zoomControl={false}
+                >
+                  <TileLayer
+                    url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+                    attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+                  />
+                  <ChangeView center={mapCenter} />
+                  <MapEvents onMapClick={(lat, lon) => fetchWeather("", lat, lon)} />
+                  <Marker 
+                    position={mapCenter}
+                    icon={L.divIcon({
+                      className: 'custom-div-icon',
+                      html: `<div class="w-8 h-8 bg-indigo-500 rounded-full border-4 border-white shadow-lg flex items-center justify-center animate-pulse">
+                              <div class="w-2 h-2 bg-white rounded-full"></div>
+                            </div>`,
+                      iconSize: [32, 32],
+                      iconAnchor: [16, 32]
+                    })}
+                  >
+                    <Popup className="weather-popup">
+                      <div className="p-2 text-slate-900">
+                        <div className="font-bold text-lg mb-1">{weather.current.name}</div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-2xl font-bold">{Math.round(weather.current.main.temp)}°C</span>
+                          <span className="text-sm capitalize text-slate-500">{weather.current.weather[0].description}</span>
+                        </div>
+                      </div>
+                    </Popup>
+                  </Marker>
+                </MapContainer>
+              </div>
+            </div>
+
+            {/* AI Insights Card (Moved below) */}
+            <div className="glass p-8 rounded-[3rem] flex flex-col justify-between bg-gradient-to-br from-indigo-500/10 to-transparent border-indigo-500/20">
                 <div className="flex items-center justify-between mb-6">
                   <h3 className="text-xl font-bold flex items-center gap-3">
                     <div className="p-2 bg-indigo-500/20 rounded-xl">
@@ -840,7 +919,50 @@ export default function App() {
                   <p className="text-[10px] text-white/20 italic text-center">Powered by Gemini 3.1 Pro</p>
                 </div>
               </div>
-            </div>
+
+              {/* Product Suggestions Card */}
+              <div className="glass p-8 rounded-[3rem] flex flex-col justify-between bg-gradient-to-br from-emerald-500/10 to-transparent border-emerald-500/20">
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="text-xl font-bold flex items-center gap-3">
+                    <div className="p-2 bg-emerald-500/20 rounded-xl">
+                      <ShoppingBag size={20} className="text-emerald-300" />
+                    </div>
+                    Gear Recommendations
+                  </h3>
+                  <div className="px-2 py-1 bg-emerald-500/20 rounded-lg text-[8px] font-bold uppercase tracking-widest text-emerald-300">Smart</div>
+                </div>
+                
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {productSuggestions.length > 0 ? productSuggestions.map((product, i) => (
+                    <motion.div 
+                      key={i}
+                      initial={{ scale: 0.9, opacity: 0 }}
+                      animate={{ scale: 1, opacity: 1 }}
+                      transition={{ delay: i * 0.1 }}
+                      className="p-4 rounded-2xl bg-white/5 border border-white/5 hover:bg-white/10 transition-all group"
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="p-2 bg-white/5 rounded-lg text-emerald-300">
+                          {product.category === "clothing" ? <Shirt size={14} /> : 
+                           product.category === "protection" ? <ShieldCheck size={14} /> : 
+                           <ShoppingBag size={14} />}
+                        </div>
+                        <span className="text-sm font-bold text-white group-hover:text-emerald-300 transition-colors">{product.name}</span>
+                      </div>
+                      <p className="text-[10px] text-white/40 leading-relaxed">{product.reason}</p>
+                    </motion.div>
+                  )) : (
+                    <div className="col-span-full flex flex-col items-center justify-center py-10 text-white/20">
+                      <ShoppingBag size={32} className="mb-2 animate-pulse" />
+                      <p className="text-xs font-medium">Analyzing gear needs...</p>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="mt-8 pt-6 border-t border-white/5">
+                  <p className="text-[10px] text-white/20 italic text-center">AI-Powered Recommendations</p>
+                </div>
+              </div>
 
             {/* Hourly Forecast */}
             <div className="glass p-8 rounded-[3rem] bg-gradient-to-b from-white/5 to-transparent">

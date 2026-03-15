@@ -8,6 +8,12 @@ export interface WeatherInsight {
   description: string;
 }
 
+export interface ProductSuggestion {
+  name: string;
+  reason: string;
+  category: "clothing" | "protection" | "accessory";
+}
+
 export interface TravelPlan {
   bestDays: string[];
   rainDays: string[];
@@ -105,6 +111,42 @@ export async function getSmartAlerts(forecastData: any): Promise<string[]> {
     return JSON.parse(response.text || "[]");
   } catch (error) {
     console.error("Error fetching smart alerts:", error);
+    return [];
+  }
+}
+
+export async function getProductSuggestions(weatherData: any): Promise<ProductSuggestion[]> {
+  const prompt = `Based on this weather data: ${JSON.stringify(weatherData.current)}, suggest 3-4 essential products or items the user should have.
+  Examples: Sunscreen for high UV, Umbrella for rain, Heavy Jacket for cold, Sunglasses for bright sun.
+  Return the response as a JSON array of objects with 'name', 'reason', and 'category' (one of: clothing, protection, accessory) fields.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              name: { type: Type.STRING },
+              reason: { type: Type.STRING },
+              category: { 
+                type: Type.STRING,
+                enum: ["clothing", "protection", "accessory"]
+              },
+            },
+            required: ["name", "reason", "category"],
+          },
+        },
+      },
+    });
+
+    return JSON.parse(response.text || "[]");
+  } catch (error) {
+    console.error("Error fetching product suggestions:", error);
     return [];
   }
 }

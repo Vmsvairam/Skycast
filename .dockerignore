@@ -1,0 +1,9 @@
+node_modules
+dist
+.git
+.env
+Dockerfile
+.dockerignore
+README.md
+README_DEPLOY.md
+deploy.sh
